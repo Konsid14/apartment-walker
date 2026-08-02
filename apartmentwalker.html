@@ -1,0 +1,1243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Walkable Apartment Prototype</title>
+<style>
+  :root{
+    --ink:#1c2430; --paper:#f2efe6; --line:#2b3648;
+    --blue:#2c5f8a; --blue-d:#1c3f5c; --amber:#c8842e;
+  }
+  html,body{margin:0;height:100%;background:var(--ink);font-family:'Segoe UI',Helvetica,Arial,sans-serif;overflow:hidden;color:var(--paper);}
+  #app{position:relative;width:100vw;height:100vh;}
+  canvas{display:block;}
+
+  #hud{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:flex-start;padding:14px 16px;pointer-events:none;z-index:5;}
+  #brand{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--paper);opacity:.8;pointer-events:auto;}
+  #brand b{color:var(--amber);}
+
+  #panel{
+    position:absolute;top:0;right:0;bottom:0;width:300px;background:rgba(18,24,32,.94);
+    border-left:1px solid rgba(255,255,255,.08);padding:16px;box-sizing:border-box;
+    overflow-y:auto;pointer-events:auto;z-index:10;transition:transform .25s ease;
+  }
+  #panel.hidden{transform:translateX(100%);}
+  #panel h2{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#9fb3c8;margin:18px 0 8px;border-bottom:1px solid rgba(255,255,255,.08);padding-bottom:6px;}
+  #panel h2:first-child{margin-top:0;}
+  .rooms{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .roombtn{
+    background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.12);border-radius:6px;
+    color:var(--paper);padding:10px 8px;font-size:12px;cursor:pointer;text-align:left;line-height:1.4;
+  }
+  .roombtn:hover{border-color:var(--amber);}
+  .roombtn.active{border-color:var(--amber);background:rgba(200,132,46,.15);}
+  .roombtn small{display:block;color:#9fb3c8;font-size:10px;margin-top:2px;}
+
+  .furn-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .furnbtn{
+    background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.12);border-radius:6px;
+    color:var(--paper);padding:9px 6px;font-size:11px;cursor:pointer;text-align:center;
+    display:flex;flex-direction:column;align-items:center;gap:5px;
+  }
+  .furnbtn:hover{border-color:var(--amber);}
+  .furnbtn .sw{width:26px;height:16px;border-radius:2px;}
+
+  .row{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#c9d2dc;margin:6px 0;}
+  .row button{
+    background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);color:var(--paper);
+    border-radius:5px;padding:5px 9px;font-size:11px;cursor:pointer;
+  }
+  .row button:hover{border-color:var(--amber);}
+  .full{width:100%;margin-top:6px;}
+
+  #sel-box{font-size:12px;color:#c9d2dc;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:10px;}
+  #sel-box.empty{color:#7c8898;text-align:center;font-style:italic;}
+
+  #toggle-panel{
+    position:absolute;top:14px;right:14px;z-index:11;pointer-events:auto;
+    background:rgba(18,24,32,.85);border:1px solid rgba(255,255,255,.15);color:var(--paper);
+    width:34px;height:34px;border-radius:6px;cursor:pointer;font-size:16px;
+  }
+  #panel:not(.hidden) ~ #toggle-panel{right:314px;}
+
+  #crosshair{
+    position:absolute;top:50%;left:50%;width:6px;height:6px;margin:-3px 0 0 -3px;
+    border-radius:50%;background:var(--amber);opacity:0;pointer-events:none;z-index:6;
+  }
+  #crosshair.on{opacity:.9;}
+
+  #overlay{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(ellipse at center,#26313f,#12181f);z-index:20;flex-direction:column;text-align:center;
+  }
+  #overlay h1{font-size:22px;font-weight:500;letter-spacing:.02em;margin:0 0 8px;}
+  #overlay h1 b{color:var(--amber);}
+  #overlay p{color:#9fb3c8;font-size:13px;max-width:380px;line-height:1.6;margin:0 0 20px;}
+  #enter-btn{
+    background:var(--amber);border:none;color:#2b1c08;font-weight:600;padding:12px 26px;
+    border-radius:6px;cursor:pointer;font-size:14px;letter-spacing:.02em;
+  }
+  #enter-btn:hover{filter:brightness(1.08);}
+
+  #instructions{
+    position:absolute;left:16px;bottom:16px;z-index:6;pointer-events:none;
+    background:rgba(18,24,32,.72);border:1px solid rgba(255,255,255,.08);border-radius:6px;
+    padding:10px 14px;font-size:11px;color:#c9d2dc;line-height:1.7;
+  }
+  #instructions b{color:var(--amber);}
+
+  #mode-tag{
+    position:absolute;left:16px;top:14px;z-index:6;pointer-events:none;
+    background:rgba(18,24,32,.72);border:1px solid rgba(255,255,255,.08);border-radius:6px;
+    padding:6px 12px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--amber);
+  }
+
+  #ph-input{position:absolute;bottom:16px;right:314px;z-index:8;display:none;}
+  .dim-row{display:flex;gap:6px;}
+  .dim-row input{width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);
+    color:var(--paper);border-radius:5px;padding:6px;font-size:12px;box-sizing:border-box;}
+  .dim-label{font-size:10px;color:#9fb3c8;margin-bottom:2px;display:block;}
+
+  #plan-editor{position:absolute;inset:0;z-index:30;background:#12181f;display:none;flex-direction:column;}
+  #plan-toolbar{display:flex;align-items:center;gap:8px;padding:10px 14px;background:rgba(0,0,0,.35);border-bottom:1px solid rgba(255,255,255,.08);flex-wrap:wrap;}
+  #plan-toolbar button{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.16);color:var(--paper);
+    border-radius:5px;padding:7px 12px;font-size:12px;cursor:pointer;}
+  #plan-toolbar button.active{border-color:var(--amber);background:rgba(200,132,46,.18);}
+  #plan-toolbar button:hover{border-color:var(--amber);}
+  #plan-toolbar .sp{flex:1;}
+  #plan-toolbar #plan-status{font-size:11px;color:#9fb3c8;}
+  #plan-canvas-wrap{flex:1;position:relative;overflow:auto;display:flex;align-items:center;justify-content:center;}
+  #plan-canvas-wrap canvas{cursor:crosshair;box-shadow:0 0 0 1px rgba(255,255,255,.15);}
+  #plan-done-bar{padding:10px 14px;background:rgba(0,0,0,.35);border-top:1px solid rgba(255,255,255,.08);
+    display:flex;justify-content:flex-end;gap:8px;}
+  #plan-done-bar button{background:var(--amber);border:none;color:#2b1c08;font-weight:600;padding:9px 20px;
+    border-radius:6px;cursor:pointer;font-size:13px;}
+  #plan-done-bar .secondary{background:rgba(255,255,255,.06);color:var(--paper);border:1px solid rgba(255,255,255,.16);font-weight:400;}
+  #scale-prompt{position:absolute;z-index:31;background:rgba(18,24,32,.97);border:1px solid rgba(255,255,255,.15);
+    border-radius:8px;padding:14px;display:none;flex-direction:column;gap:8px;top:50%;left:50%;transform:translate(-50%,-50%);width:220px;}
+  #scale-prompt input{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.18);color:var(--paper);
+    border-radius:5px;padding:7px;font-size:12px;box-sizing:border-box;}
+  #scale-prompt button{background:var(--amber);border:none;color:#2b1c08;font-weight:600;padding:7px;border-radius:5px;cursor:pointer;font-size:12px;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="overlay">
+    <h1>Walk your <b>apartment</b>, before it exists.</h1>
+    <p>Pick a room shape, add furniture, then walk through it in first person. Click below to start — mouse look, WASD to move.</p>
+    <button id="enter-btn">Enter prototype</button>
+  </div>
+
+  <div id="mode-tag">Build mode</div>
+  <div id="crosshair"></div>
+  <div id="instructions"><b>WASD</b> move · <b>mouse</b> look · <b>click+drag</b> place/move furniture · <b>Esc</b> exit walk · <b>Del</b> remove selected</div>
+
+  <button id="toggle-panel" title="Toggle panel">&#9776;</button>
+
+  <div id="plan-editor">
+    <div id="plan-toolbar">
+      <button id="plan-redetect">Auto-detect walls</button>
+      <button id="plan-ocr">Read dimensions (OCR)</button>
+      <button id="plan-add-mode">Draw wall</button>
+      <button id="plan-scale-mode">Set scale manually</button>
+      <button id="plan-entrance-mode">Set entrance</button>
+      <button id="plan-delete">Delete selected</button>
+      <div class="sp"></div>
+      <span id="plan-status">Click "Auto-detect walls" to find lines in the plan.</span>
+    </div>
+    <div id="plan-canvas-wrap">
+      <canvas id="plan-canvas"></canvas>
+      <div id="scale-prompt">
+        <label class="dim-label">Real-world distance of that line (meters)</label>
+        <input type="number" id="scale-input" value="3" step="0.1" min="0.1">
+        <button id="scale-confirm">Set scale</button>
+      </div>
+    </div>
+    <div id="plan-done-bar">
+      <button class="secondary" id="plan-cancel">Cancel</button>
+      <button id="plan-build">Build 3D from plan</button>
+    </div>
+  </div>
+
+  <div id="panel">
+    <h2>Bottom view image</h2>
+    <button class="full" id="plan-upload-btn">Upload bottom view image</button>
+    <input type="file" id="plan-file" accept="image/*" style="display:none;">
+    <div class="row"><span id="plan-file-status">No image loaded.</span></div>
+
+    <h2>Room shape (presets)</h2>
+    <div class="rooms" id="room-list"></div>
+
+    <h2>Room size</h2>
+    <div class="row"><span>Width</span><span id="w-val">6.0 m</span></div>
+    <input type="range" class="full" id="w-slider" min="3" max="12" step="0.5" value="6">
+    <div class="row"><span>Depth</span><span id="d-val">7.0 m</span></div>
+    <input type="range" class="full" id="d-slider" min="3" max="12" step="0.5" value="7">
+
+    <h2>Entrance (presets)</h2>
+    <div class="rooms" id="entrance-side-list"></div>
+    <div class="row" style="margin-top:8px;"><span>Position along wall</span><span id="entrance-pos-val">50%</span></div>
+    <input type="range" class="full" id="entrance-pos-slider" min="0" max="100" step="1" value="50">
+
+    <h2>Materials</h2>
+    <div class="row"><span>Floor image</span><span></span></div>
+    <input type="file" id="floor-tex" accept="image/*" class="full">
+    <div class="row"><span>Wall image</span><span></span></div>
+    <input type="file" id="wall-tex" accept="image/*" class="full">
+    <button class="full" id="clear-tex" style="margin-top:8px;">Reset to plain</button>
+
+    <h2>Furniture</h2>
+    <div class="furn-grid" id="furn-list"></div>
+
+    <h2>Selection</h2>
+    <div id="sel-box" class="empty">Click a placed item to select it.</div>
+
+    <h2>View</h2>
+    <button class="full" id="walk-btn">Enter walk mode</button>
+    <button class="full" id="reset-btn" style="margin-top:8px;">Clear furniture</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+  var scene, camera, renderer, clock;
+  var floorGroup, wallsGroup, furnitureGroup = new THREE.Group();
+  var raycaster = new THREE.Raycaster();
+  var mouse = new THREE.Vector2();
+  var walking = false;
+  var selected = null;
+  var placingType = null;
+
+  var roomPresets = [
+    {id:'studio', name:'Studio', desc:'One open room', shape:'rect'},
+    {id:'onebed', name:'1-bedroom', desc:'Living + bedroom', shape:'twobox'},
+    {id:'lshape', name:'L-shape loft', desc:'Open L layout', shape:'lshape'},
+    {id:'square', name:'Square room', desc:'Simple square', shape:'square'}
+  ];
+  var currentPreset = roomPresets[0];
+  var roomW = 6, roomD = 7, wallH = 2.7;
+  var textureLoader = new THREE.TextureLoader();
+  var floorTexImg = null, wallTexImg = null;
+  var floorMatRef = null, wallMatRef = null;
+
+  var usePlan = false;
+  var planImg = null;
+  var planSegs = [];
+  var planSelected = -1;
+  var planMode = 'select';
+  var planScalePxPerM = null;
+  var planScalePts = [];
+  var planCanvas, planCtx, planScaleFactor = 1;
+  var planDrag = null;
+
+  var ocrLabels = [];
+  var ocrRunning = false;
+
+  var furnitureTypes = [
+    {id:'sofa', name:'Sofa', color:0x3d5a80, w:1.8, d:0.85, h:0.8},
+    {id:'bed', name:'Bed', color:0x8a5a44, w:1.6, d:2.0, h:0.55},
+    {id:'table', name:'Dining table', color:0x6b4226, w:1.4, d:0.9, h:0.75},
+    {id:'chair', name:'Chair', color:0x9a6b3f, w:0.5, d:0.5, h:0.85},
+    {id:'desk', name:'Desk', color:0x4a4a4a, w:1.2, d:0.6, h:0.75},
+    {id:'wardrobe', name:'Wardrobe', color:0x5c4a3d, w:1.2, d:0.6, h:2.0},
+    {id:'shelf', name:'Bookshelf', color:0x704d33, w:0.9, d:0.35, h:1.9},
+    {id:'plant', name:'Plant', color:0x3a6b35, w:0.4, d:0.4, h:1.1}
+  ];
+
+  var keys = {};
+  var yaw = 0, pitch = 0;
+  var velocity = new THREE.Vector3();
+  var walkStart = new THREE.Vector3(0,1.65,0);
+  var entryYaw = Math.PI;
+
+  var entranceSide = 'front';
+  var entrancePos = 0.5;
+  var entranceWorldPos = null;
+  var entranceNormal = null;
+
+  var planEntranceIdx = -1;
+  var planEntranceT = 0.5;
+
+  function init(){
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xdfe6ea);
+    scene.fog = new THREE.Fog(0xdfe6ea, 15, 30);
+
+    camera = new THREE.PerspectiveCamera(65, window.innerWidth/window.innerHeight, 0.1, 100);
+    camera.position.set(0, 9, 11);
+    camera.lookAt(0,0,0);
+
+    renderer = new THREE.WebGLRenderer({antialias:true});
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    document.getElementById('app').insertBefore(renderer.domElement, document.getElementById('app').firstChild);
+
+    var hemi = new THREE.HemisphereLight(0xffffff, 0x555566, 0.9);
+    scene.add(hemi);
+    var dir = new THREE.DirectionalLight(0xffffff, 0.8);
+    dir.position.set(6,10,4);
+    dir.castShadow = true;
+    dir.shadow.mapSize.set(1024,1024);
+    dir.shadow.camera.left = -10; dir.shadow.camera.right = 10;
+    dir.shadow.camera.top = 10; dir.shadow.camera.bottom = -10;
+    scene.add(dir);
+
+    scene.add(furnitureGroup);
+    buildRoom();
+
+    clock = new THREE.Clock();
+
+    window.addEventListener('resize', onResize);
+    renderer.domElement.addEventListener('mousedown', onCanvasMouseDown);
+    renderer.domElement.addEventListener('mousemove', onCanvasMouseMove);
+    window.addEventListener('mouseup', onCanvasMouseUp);
+    document.addEventListener('keydown', function(e){
+      keys[e.code] = true;
+      if (e.code === 'Escape' && walking) exitWalk();
+      if (e.code === 'Delete' || e.code === 'Backspace') deleteSelected();
+    });
+    document.addEventListener('keyup', function(e){ keys[e.code] = false; });
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('pointerlockchange', onPointerLockChange);
+
+    animate();
+  }
+
+  function clearGroup(g){
+    while(g.children.length) g.remove(g.children[0]);
+  }
+
+  function buildRoom(){
+    if (floorGroup) scene.remove(floorGroup);
+    if (wallsGroup) scene.remove(wallsGroup);
+    floorGroup = new THREE.Group();
+    wallsGroup = new THREE.Group();
+
+    var floorMat = new THREE.MeshStandardMaterial({color:0xe8ded0, roughness:0.9});
+    var wallMat = new THREE.MeshStandardMaterial({color:0xffffff, roughness:0.95});
+    floorMatRef = floorMat; wallMatRef = wallMat;
+    applyTextureToMat(floorMat, floorTexImg, Math.max(roomW,roomD)*0.6);
+    applyTextureToMat(wallMat, wallTexImg, 2.5);
+    var wallH2 = wallH;
+    entranceWorldPos = null;
+    entranceNormal = null;
+
+    function addFloor(x,z,w,d){
+      var f = new THREE.Mesh(new THREE.BoxGeometry(w,0.1,d), floorMat);
+      f.position.set(x,-0.05,z);
+      f.receiveShadow = true;
+      floorGroup.add(f);
+    }
+    function addWall(x,z,w,d,ry){
+      var wall = new THREE.Mesh(new THREE.BoxGeometry(w,wallH2,d), wallMat);
+      wall.position.set(x,wallH2/2,z);
+      if(ry) wall.rotation.y = ry;
+      wall.castShadow = true; wall.receiveShadow = true;
+      wallsGroup.add(wall);
+    }
+    function addWallMaybeDoor(x,z,length,thickness,ry,tag){
+      if(tag !== entranceSide){ addWall(x,z,length,thickness,ry); return; }
+      var dw = Math.min(0.9, length-0.4);
+      if(dw < 0.3){ addWall(x,z,length,thickness,ry); return; }
+      var half = dw/2, edge = 0.15;
+      var center = -length/2 + entrancePos*length;
+      center = Math.max(-length/2+half+edge, Math.min(length/2-half-edge, center));
+      var leftLen = center - half - (-length/2);
+      var rightLen = (length/2) - (center+half);
+      var dir = (!ry) ? {x:1,z:0} : {x:0,z:1};
+      if(leftLen > 0.05){
+        addWall(x+dir.x*(-length/2+leftLen/2), z+dir.z*(-length/2+leftLen/2), leftLen, thickness, ry);
+      }
+      if(rightLen > 0.05){
+        addWall(x+dir.x*(length/2-rightLen/2), z+dir.z*(length/2-rightLen/2), rightLen, thickness, ry);
+      }
+      var doorX = x + dir.x*center, doorZ = z + dir.z*center;
+      var n1 = {x:-dir.z, z:dir.x};
+      var toOrigin = {x:-doorX, z:-doorZ};
+      var dot1 = n1.x*toOrigin.x + n1.z*toOrigin.z;
+      entranceNormal = dot1 >= 0 ? n1 : {x:-n1.x, z:-n1.z};
+      entranceWorldPos = {x:doorX, z:doorZ};
+    }
+
+    var t = 0.12;
+    if (currentPreset.shape === 'rect' || currentPreset.shape === 'square') {
+      var w = currentPreset.shape==='square' ? Math.min(roomW,roomD) : roomW;
+      var d = currentPreset.shape==='square' ? Math.min(roomW,roomD) : roomD;
+      addFloor(0,0,w,d);
+      addWallMaybeDoor(0,-d/2,w,t,0,'back');
+      addWallMaybeDoor(0,d/2,w,t,0,'front');
+      addWallMaybeDoor(-w/2,0,d,t,Math.PI/2,'left');
+      addWallMaybeDoor(w/2,0,d,t,Math.PI/2,'right');
+    } else if (currentPreset.shape === 'twobox') {
+      var w1=roomW, d1=roomD*0.6, d2=roomD*0.4;
+      addFloor(0,-d2/2,w1,d1+d2);
+      addWallMaybeDoor(0,-(d1+d2)/2,w1,t,0,'back');
+      addWallMaybeDoor(0,(d1+d2)/2,w1,t,0,'front');
+      addWallMaybeDoor(-w1/2,0,d1+d2,t,Math.PI/2,'left');
+      addWallMaybeDoor(w1/2,0,d1+d2,t,Math.PI/2,'right');
+      addWall(-w1*0.15,0,w1*0.7,t);
+    } else if (currentPreset.shape === 'lshape') {
+      var w=roomW, d=roomD, cutW=w*0.45, cutD=d*0.45;
+      addFloor(-cutW/4,0,w-cutW/2,d);
+      addFloor(cutW/4+ (w-cutW)/2 - cutW/4,0,0,0);
+      addFloor(w/2-cutW/2, d/2-cutD/2, cutW, cutD);
+      addWallMaybeDoor(0,-d/2,w,t,0,'back');
+      addWallMaybeDoor(-w/2,0,d,t,Math.PI/2,'left');
+      addWallMaybeDoor(-cutW/2, d/2, w-cutW, t,0,'front');
+      addWall(w/2-cutW, (d/2-cutD/2), cutD, t, Math.PI/2);
+      addWall(w/2, d/2-cutD, cutW, t);
+      addWallMaybeDoor(w/2, 0, d-cutD, t, Math.PI/2,'right');
+    }
+
+    if(entranceWorldPos){
+      var pushIn = 0.8;
+      walkStart.set(entranceWorldPos.x + entranceNormal.x*pushIn, 1.65, entranceWorldPos.z + entranceNormal.z*pushIn);
+      entryYaw = Math.atan2(-entranceNormal.x, -entranceNormal.z);
+    }
+
+    scene.add(floorGroup);
+    scene.add(wallsGroup);
+  }
+
+  function applyTextureToMat(mat, imgUrl, repeatCount){
+    if(!imgUrl){
+      mat.map = null;
+      mat.needsUpdate = true;
+      return;
+    }
+    textureLoader.load(imgUrl, function(tex){
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(repeatCount, repeatCount);
+      tex.colorSpace = THREE.SRGBColorSpace || tex.colorSpace;
+      mat.map = tex;
+      mat.color.set(0xffffff);
+      mat.needsUpdate = true;
+    });
+  }
+
+  function loadImageFile(input, callback){
+    var file = input.files && input.files[0];
+    if(!file) return;
+    var reader = new FileReader();
+    reader.onload = function(e){ callback(e.target.result); };
+    reader.readAsDataURL(file);
+  }
+
+  function addWallSegment3D(x1,z1,x2,z2,thickness,height,mat){
+    var dx = x2-x1, dz = z2-z1;
+    var len = Math.sqrt(dx*dx+dz*dz);
+    if(len < 0.05) return;
+    var wall = new THREE.Mesh(new THREE.BoxGeometry(len, height, thickness), mat);
+    wall.position.set((x1+x2)/2, height/2, (z1+z2)/2);
+    wall.rotation.y = -Math.atan2(dz, dx);
+    wall.castShadow = true; wall.receiveShadow = true;
+    wallsGroup.add(wall);
+  }
+
+  function buildRoomFromPlan(){
+    if (floorGroup) scene.remove(floorGroup);
+    if (wallsGroup) scene.remove(wallsGroup);
+    floorGroup = new THREE.Group();
+    wallsGroup = new THREE.Group();
+
+    var floorMat = new THREE.MeshStandardMaterial({color:0xe8ded0, roughness:0.9});
+    var wallMat = new THREE.MeshStandardMaterial({color:0xffffff, roughness:0.95});
+    floorMatRef = floorMat; wallMatRef = wallMat;
+
+    if(!planSegs.length || !planScalePxPerM){
+      scene.add(floorGroup); scene.add(wallsGroup);
+      return;
+    }
+
+    var pts = [];
+    planSegs.forEach(function(s){ pts.push([s.x1,s.y1],[s.x2,s.y2]); });
+    var minX = Math.min.apply(null, pts.map(function(p){return p[0];}));
+    var maxX = Math.max.apply(null, pts.map(function(p){return p[0];}));
+    var minY = Math.min.apply(null, pts.map(function(p){return p[1];}));
+    var maxY = Math.max.apply(null, pts.map(function(p){return p[1];}));
+    var cx = (minX+maxX)/2, cy = (minY+maxY)/2;
+
+    function toM(px,py){
+      return [ (px-cx)/planScalePxPerM, (py-cy)/planScalePxPerM ];
+    }
+
+    var thickness = 0.12;
+    entranceWorldPos = null;
+    entranceNormal = null;
+
+    planSegs.forEach(function(s, idx){
+      var a = toM(s.x1,s.y1), b = toM(s.x2,s.y2);
+      if(idx !== planEntranceIdx){
+        addWallSegment3D(a[0],a[1],b[0],b[1],thickness,wallH,wallMat);
+        return;
+      }
+      var dx = b[0]-a[0], dz = b[1]-a[1];
+      var length = Math.hypot(dx,dz);
+      var ux = dx/length, uz = dz/length;
+      var dw = Math.min(0.9, length-0.3);
+      if(dw < 0.3){
+        addWallSegment3D(a[0],a[1],b[0],b[1],thickness,wallH,wallMat);
+        return;
+      }
+      var half = dw/2, edge = 0.1;
+      var tFrac = Math.max((half+edge)/length, Math.min(1-(half+edge)/length, planEntranceT));
+      var centerDist = tFrac*length;
+      var doorX = a[0]+ux*centerDist, doorZ = a[1]+uz*centerDist;
+      var p1x = a[0]+ux*(centerDist-half), p1z = a[1]+uz*(centerDist-half);
+      var p2x = a[0]+ux*(centerDist+half), p2z = a[1]+uz*(centerDist+half);
+      addWallSegment3D(a[0],a[1],p1x,p1z,thickness,wallH,wallMat);
+      addWallSegment3D(p2x,p2z,b[0],b[1],thickness,wallH,wallMat);
+
+      var n1 = {x:-uz, z:ux};
+      var toOrigin = {x:-doorX, z:-doorZ};
+      var dot1 = n1.x*toOrigin.x + n1.z*toOrigin.z;
+      entranceNormal = dot1 >= 0 ? n1 : {x:-n1.x, z:-n1.z};
+      entranceWorldPos = {x:doorX, z:doorZ};
+    });
+
+    var w = (maxX-minX)/planScalePxPerM;
+    var d = (maxY-minY)/planScalePxPerM;
+    roomW = w; roomD = d;
+    applyTextureToMat(floorMat, floorTexImg, Math.max(w,d)*0.6);
+    applyTextureToMat(wallMat, wallTexImg, 2.5);
+    var floor = new THREE.Mesh(new THREE.BoxGeometry(w+thickness, 0.1, d+thickness), floorMat);
+    floor.position.set(0,-0.05,0);
+    floor.receiveShadow = true;
+    floorGroup.add(floor);
+
+    if(entranceWorldPos){
+      var pushIn = 0.8;
+      walkStart.set(entranceWorldPos.x + entranceNormal.x*pushIn, 1.65, entranceWorldPos.z + entranceNormal.z*pushIn);
+      entryYaw = Math.atan2(-entranceNormal.x, -entranceNormal.z);
+    } else {
+      walkStart.set(0, 1.65, d/2 - Math.min(0.8, d/2*0.5));
+      entryYaw = Math.PI;
+    }
+
+    scene.add(floorGroup);
+    scene.add(wallsGroup);
+  }
+
+  function makeFurnitureMesh(type){
+    var g = new THREE.Group();
+    var mat = new THREE.MeshStandardMaterial({color:type.color, roughness:0.7});
+    var body = new THREE.Mesh(new THREE.BoxGeometry(type.w, type.h, type.d), mat);
+    body.position.y = type.h/2;
+    body.castShadow = true; body.receiveShadow = true;
+    g.add(body);
+    if(type.id==='chair' || type.id==='sofa'){
+      var back = new THREE.Mesh(new THREE.BoxGeometry(type.w, type.h*0.9, 0.1), mat);
+      back.position.set(0, type.h + type.h*0.45, -type.d/2+0.05);
+      back.castShadow = true;
+      g.add(back);
+    }
+    g.userData.type = type;
+    return g;
+  }
+
+  function addFurniture(typeId, x, z){
+    var type = furnitureTypes.filter(function(t){return t.id===typeId;})[0];
+    if(!type) return;
+    var mesh = makeFurnitureMesh(type);
+    mesh.position.set(x,0,z);
+    mesh.userData.isFurniture = true;
+    furnitureGroup.add(mesh);
+    selectItem(mesh);
+  }
+
+  function selectItem(mesh){
+    if(selected) unhighlight(selected);
+    selected = mesh;
+    if(selected) highlight(selected);
+    updateSelBox();
+  }
+  function highlight(mesh){
+    mesh.children.forEach(function(c){
+      c.userData._origEmissive = c.material.emissive ? c.material.emissive.getHex() : 0;
+      if(c.material.emissive) c.material.emissive.setHex(0x553300);
+    });
+  }
+  function unhighlight(mesh){
+    mesh.children.forEach(function(c){
+      if(c.material.emissive) c.material.emissive.setHex(c.userData._origEmissive || 0);
+    });
+  }
+  function deleteSelected(){
+    if(!selected || walking) return;
+    furnitureGroup.remove(selected);
+    selected = null;
+    updateSelBox();
+  }
+
+  function updateSelBox(){
+    var box = document.getElementById('sel-box');
+    if(!selected){ box.className='empty'; box.textContent='Click a placed item to select it.'; return; }
+    box.className='';
+    var t = selected.userData.type;
+    box.innerHTML = '<div style="margin-bottom:8px;"><b>'+t.name+'</b></div>' +
+      '<div class="row"><span>Rotate</span><span></span></div>' +
+      '<div class="row"><button id="rot-l">&#8630; -15&deg;</button><button id="rot-r">+15&deg; &#8631;</button></div>' +
+      '<div class="row"><button id="del-item" style="width:100%;">Remove item</button></div>';
+    document.getElementById('rot-l').onclick = function(){ selected.rotation.y -= Math.PI/12; };
+    document.getElementById('rot-r').onclick = function(){ selected.rotation.y += Math.PI/12; };
+    document.getElementById('del-item').onclick = deleteSelected;
+  }
+
+  var dragging = null;
+
+  function onCanvasMouseDown(e){
+    if(walking) return;
+    mouse.x = (e.clientX/window.innerWidth)*2-1;
+    mouse.y = -(e.clientY/window.innerHeight)*2+1;
+    raycaster.setFromCamera(mouse, camera);
+
+    if(placingType){
+      var floorHits = raycaster.intersectObjects(floorGroup.children);
+      if(floorHits.length){
+        addFurniture(placingType, floorHits[0].point.x, floorHits[0].point.z);
+      }
+      placingType = null;
+      document.querySelectorAll('.furnbtn').forEach(function(b){b.style.borderColor='';});
+      return;
+    }
+
+    var hits = raycaster.intersectObjects(furnitureGroup.children, true);
+    if(hits.length){
+      var obj = hits[0].object;
+      while(obj.parent && !obj.userData.isFurniture) obj = obj.parent;
+      selectItem(obj);
+      dragging = obj;
+    } else {
+      selectItem(null);
+    }
+  }
+  function onCanvasMouseMove(e){
+    if(!dragging || walking) return;
+    mouse.x = (e.clientX/window.innerWidth)*2-1;
+    mouse.y = -(e.clientY/window.innerHeight)*2+1;
+    raycaster.setFromCamera(mouse, camera);
+    var hits = raycaster.intersectObjects(floorGroup.children);
+    if(hits.length){
+      dragging.position.x = hits[0].point.x;
+      dragging.position.z = hits[0].point.z;
+    }
+  }
+  function onCanvasMouseUp(){
+    dragging = null;
+  }
+
+  function onMouseMove(e){
+    if(!walking) return;
+    yaw -= e.movementX * 0.0022;
+    pitch -= e.movementY * 0.0022;
+    pitch = Math.max(-1.3, Math.min(1.3, pitch));
+  }
+
+  function onPointerLockChange(){
+    if(document.pointerLockElement !== renderer.domElement && walking){
+      exitWalk();
+    }
+  }
+
+  function enterWalk(){
+    walking = true;
+    document.getElementById('mode-tag').textContent = 'Walk mode';
+    document.getElementById('crosshair').classList.add('on');
+    document.getElementById('walk-btn').textContent = 'Exit walk mode';
+    camera.position.copy(walkStart);
+    yaw = entryYaw; pitch = 0;
+    renderer.domElement.requestPointerLock();
+  }
+  function exitWalk(){
+    walking = false;
+    document.getElementById('mode-tag').textContent = 'Build mode';
+    document.getElementById('crosshair').classList.remove('on');
+    document.getElementById('walk-btn').textContent = 'Enter walk mode';
+    if(document.pointerLockElement) document.exitPointerLock();
+    camera.position.set(0, 9, 11);
+    camera.rotation.set(0,0,0);
+    camera.lookAt(0,0,0);
+  }
+
+  function updateWalk(dt){
+    var speed = 3.2;
+    var dir = new THREE.Vector3();
+    var forward = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)).multiplyScalar(-1);
+    var right = new THREE.Vector3(forward.z, 0, -forward.x);
+    if(keys['KeyW']) dir.add(forward);
+    if(keys['KeyS']) dir.sub(forward);
+    if(keys['KeyD']) dir.add(right);
+    if(keys['KeyA']) dir.sub(right);
+    if(dir.lengthSq()>0){ dir.normalize(); }
+    camera.position.addScaledVector(dir, speed*dt);
+    camera.position.y = 1.65;
+
+    var bound = Math.max(roomW,roomD)/2 + 2;
+    camera.position.x = Math.max(-bound, Math.min(bound, camera.position.x));
+    camera.position.z = Math.max(-bound, Math.min(bound, camera.position.z));
+
+    var euler = new THREE.Euler(pitch, yaw, 0, 'YXZ');
+    camera.quaternion.setFromEuler(euler);
+  }
+
+  function animate(){
+    requestAnimationFrame(animate);
+    var dt = Math.min(clock.getDelta(), 0.05);
+    if(walking) updateWalk(dt);
+    renderer.render(scene, camera);
+  }
+
+  function onResize(){
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+
+  function openPlanEditor(url){
+    var img = new Image();
+    img.onload = function(){
+      planImg = img;
+      planSegs = [];
+      planScalePxPerM = null;
+      planScalePts = [];
+      planSelected = -1;
+      ocrLabels = [];
+      planEntranceIdx = -1;
+      planEntranceT = 0.5;
+      document.getElementById('plan-editor').style.display = 'flex';
+      setupPlanCanvas();
+      autoDetectWalls();
+    };
+    img.src = url;
+  }
+
+  function setupPlanCanvas(){
+    planCanvas = document.getElementById('plan-canvas');
+    planCtx = planCanvas.getContext('2d');
+    var maxW = Math.min(window.innerWidth - 60, 1100);
+    var maxH = window.innerHeight - 160;
+    planScaleFactor = Math.min(maxW/planImg.width, maxH/planImg.height, 1.4);
+    planCanvas.width = planImg.width * planScaleFactor;
+    planCanvas.height = planImg.height * planScaleFactor;
+    drawPlan();
+  }
+
+  function autoDetectWalls(){
+    document.getElementById('plan-status').textContent = 'Detecting walls...';
+    setTimeout(function(){
+      var maxDim = 480;
+      var scale = Math.min(1, maxDim / Math.max(planImg.width, planImg.height));
+      var pw = Math.max(1, Math.round(planImg.width*scale));
+      var ph = Math.max(1, Math.round(planImg.height*scale));
+      var tmp = document.createElement('canvas');
+      tmp.width = pw; tmp.height = ph;
+      var tctx = tmp.getContext('2d');
+      tctx.drawImage(planImg, 0, 0, pw, ph);
+      var data = tctx.getImageData(0,0,pw,ph).data;
+
+      var mask = new Uint8Array(pw*ph);
+      for(var i=0;i<pw*ph;i++){
+        var r=data[i*4], g=data[i*4+1], b=data[i*4+2];
+        var lum = 0.299*r+0.587*g+0.114*b;
+        mask[i] = lum < 130 ? 1 : 0;
+      }
+
+      var visited = new Uint8Array(pw*ph);
+      var segs = [];
+      var stack = [];
+      for(var y=0;y<ph;y++){
+        for(var x=0;x<pw;x++){
+          var idx = y*pw+x;
+          if(mask[idx] && !visited[idx]){
+            var minX=x,maxX=x,minY=y,maxY=y,count=0;
+            stack.push(idx); visited[idx]=1;
+            while(stack.length){
+              var cidx = stack.pop();
+              var cy = (cidx/pw)|0, cx = cidx - cy*pw;
+              count++;
+              if(cx<minX)minX=cx; if(cx>maxX)maxX=cx;
+              if(cy<minY)minY=cy; if(cy>maxY)maxY=cy;
+              var neighbors = [cidx-1,cidx+1,cidx-pw,cidx+pw];
+              for(var n=0;n<4;n++){
+                var nidx = neighbors[n];
+                if(nidx>=0 && nidx<pw*ph && mask[nidx] && !visited[nidx]){
+                  if(n<2 && ((cidx%pw)===0 || (cidx%pw)===pw-1)) continue;
+                  visited[nidx]=1; stack.push(nidx);
+                }
+              }
+            }
+            var bw = maxX-minX+1, bh = maxY-minY+1;
+            if(count < 12) continue;
+            if(bw < 4 && bh < 4) continue;
+            var midX = (minX+maxX)/2, midY = (minY+maxY)/2;
+            var seg;
+            if(bw >= bh){
+              seg = {x1:minX+1, y1:midY, x2:maxX-1, y2:midY};
+            } else {
+              seg = {x1:midX, y1:minY+1, x2:midX, y2:maxY-1};
+            }
+            var invScale = 1/scale;
+            segs.push({
+              x1: seg.x1*invScale, y1: seg.y1*invScale,
+              x2: seg.x2*invScale, y2: seg.y2*invScale
+            });
+          }
+        }
+      }
+      planSegs = segs;
+      drawPlan();
+      document.getElementById('plan-status').textContent = segs.length ?
+        (segs.length + ' wall lines found. Drag endpoints to fix, or use Draw wall / Delete selected.') :
+        'No clear wall lines found — try Draw wall to add them manually.';
+    }, 30);
+  }
+
+  function drawPlan(){
+    if(!planCtx) return;
+    planCtx.clearRect(0,0,planCanvas.width,planCanvas.height);
+    planCtx.drawImage(planImg,0,0,planCanvas.width,planCanvas.height);
+    planCtx.lineWidth = 3;
+    planSegs.forEach(function(s,i){
+      planCtx.strokeStyle = i===planSelected ? '#c8842e' : 'rgba(46,140,220,0.85)';
+      planCtx.beginPath();
+      planCtx.moveTo(s.x1*planScaleFactor, s.y1*planScaleFactor);
+      planCtx.lineTo(s.x2*planScaleFactor, s.y2*planScaleFactor);
+      planCtx.stroke();
+      [[s.x1,s.y1],[s.x2,s.y2]].forEach(function(p){
+        planCtx.fillStyle = i===planSelected ? '#c8842e' : '#2e8cdc';
+        planCtx.beginPath();
+        planCtx.arc(p[0]*planScaleFactor, p[1]*planScaleFactor, 5, 0, Math.PI*2);
+        planCtx.fill();
+      });
+    });
+    if(planScalePts.length===1){
+      planCtx.fillStyle = '#c8842e';
+      planCtx.beginPath();
+      planCtx.arc(planScalePts[0][0]*planScaleFactor, planScalePts[0][1]*planScaleFactor, 5,0,Math.PI*2);
+      planCtx.fill();
+    }
+    ocrLabels.forEach(function(l){
+      var x = l.cx*planScaleFactor, y = l.cy*planScaleFactor;
+      planCtx.font = '11px sans-serif';
+      var w = planCtx.measureText(l.text).width + 10;
+      planCtx.fillStyle = 'rgba(200,132,46,0.92)';
+      planCtx.fillRect(x-w/2, y-9, w, 18);
+      planCtx.fillStyle = '#2b1c08';
+      planCtx.textAlign = 'center';
+      planCtx.textBaseline = 'middle';
+      planCtx.fillText(l.text, x, y+1);
+      planCtx.textAlign = 'left';
+    });
+    if(planEntranceIdx >= 0 && planEntranceIdx < planSegs.length){
+      var es = planSegs[planEntranceIdx];
+      var ex = (es.x1 + (es.x2-es.x1)*planEntranceT) * planScaleFactor;
+      var ey = (es.y1 + (es.y2-es.y1)*planEntranceT) * planScaleFactor;
+      planCtx.fillStyle = '#3fae4f';
+      planCtx.strokeStyle = '#1f6b2a';
+      planCtx.lineWidth = 2;
+      planCtx.beginPath();
+      planCtx.arc(ex, ey, 9, 0, Math.PI*2);
+      planCtx.fill();
+      planCtx.stroke();
+      planCtx.fillStyle = '#fff';
+      planCtx.font = 'bold 11px sans-serif';
+      planCtx.textAlign = 'center';
+      planCtx.textBaseline = 'middle';
+      planCtx.fillText('D', ex, ey+1);
+      planCtx.textAlign = 'left';
+    }
+  }
+
+  function planPointerPos(e){
+    var rect = planCanvas.getBoundingClientRect();
+    return [ (e.clientX-rect.left)/planScaleFactor, (e.clientY-rect.top)/planScaleFactor ];
+  }
+
+  function findNearHandle(px,py){
+    var best=-1, bestEnd=null, bestDist=10/planScaleFactor;
+    planSegs.forEach(function(s,i){
+      var d1 = Math.hypot(s.x1-px, s.y1-py);
+      var d2 = Math.hypot(s.x2-px, s.y2-py);
+      if(d1<bestDist){bestDist=d1; best=i; bestEnd='x1y1';}
+      if(d2<bestDist){bestDist=d2; best=i; bestEnd='x2y2';}
+    });
+    return best>=0 ? {i:best, end:bestEnd} : null;
+  }
+  function findNearSeg(px,py){
+    var best=-1, bestDist=8/planScaleFactor;
+    planSegs.forEach(function(s,i){
+      var dx=s.x2-s.x1, dy=s.y2-s.y1;
+      var len2 = dx*dx+dy*dy || 1;
+      var t = Math.max(0,Math.min(1, ((px-s.x1)*dx+(py-s.y1)*dy)/len2));
+      var cx = s.x1+t*dx, cy = s.y1+t*dy;
+      var d = Math.hypot(px-cx, py-cy);
+      if(d<bestDist){bestDist=d; best=i;}
+    });
+    return best;
+  }
+
+  function parseDimensionMeters(text){
+    text = text.trim().replace(/,/g, '.');
+    var ftIn = text.match(/^(\d+(?:\.\d+)?)\s*'\s*(\d+(?:\.\d+)?)?\s*"?$/);
+    if(ftIn){
+      var ft = parseFloat(ftIn[1]) || 0;
+      var inch = parseFloat(ftIn[2]) || 0;
+      return ft*0.3048 + inch*0.0254;
+    }
+    var withUnit = text.match(/^(\d+(?:\.\d+)?)\s*(mm|cm|m)$/i);
+    if(withUnit){
+      var v = parseFloat(withUnit[1]);
+      var u = withUnit[2].toLowerCase();
+      if(u==='mm') return v/1000;
+      if(u==='cm') return v/100;
+      return v;
+    }
+    var plain = text.match(/^(\d+(?:\.\d+)?)$/);
+    if(plain){
+      var n = parseFloat(plain[1]);
+      if(n>0 && n<=30) return n;
+      if(n>30 && n<=3000) return n/100;
+      return null;
+    }
+    return null;
+  }
+
+  function loadTesseractThen(cb){
+    if(typeof Tesseract !== 'undefined'){ cb(); return; }
+    var s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js';
+    s.onload = cb;
+    s.onerror = function(){
+      document.getElementById('plan-status').textContent = 'Could not load the OCR library — check your internet connection, or use "Set scale manually".';
+      ocrRunning = false;
+    };
+    document.head.appendChild(s);
+  }
+
+  function runOCR(){
+    if(ocrRunning) return;
+    ocrRunning = true;
+    document.getElementById('plan-status').textContent = 'Loading OCR engine…';
+    loadTesseractThen(function(){
+      if(typeof Tesseract === 'undefined'){
+        ocrRunning = false;
+        return;
+      }
+      ocrLabels = [];
+      document.getElementById('plan-status').textContent = 'Reading dimensions from the plan… this can take a moment.';
+      Tesseract.recognize(planImg.src, 'eng')
+        .then(function(result){
+          var words = (result.data && result.data.words) || [];
+          words.forEach(function(w){
+            if(!w.text || w.confidence < 35) return;
+            var meters = parseDimensionMeters(w.text);
+            if(meters !== null && meters > 0.05){
+              ocrLabels.push({
+                text: w.text,
+                value: meters,
+                cx: (w.bbox.x0 + w.bbox.x1)/2,
+                cy: (w.bbox.y0 + w.bbox.y1)/2
+              });
+            }
+          });
+          drawPlan();
+          ocrRunning = false;
+          document.getElementById('plan-status').textContent = ocrLabels.length ?
+            (ocrLabels.length + ' dimension labels found (orange chips). Select a wall, then click its matching chip to set scale.') :
+            'No readable dimension numbers found — try "Set scale manually" instead.';
+        })
+        .catch(function(){
+          ocrRunning = false;
+          document.getElementById('plan-status').textContent = 'OCR failed to read this image.';
+        });
+    });
+  }
+
+  function findNearOcrLabel(px,py){
+    var best=-1, bestDist=18/planScaleFactor;
+    ocrLabels.forEach(function(l,i){
+      var d = Math.hypot(l.cx-px, l.cy-py);
+      if(d<bestDist){bestDist=d; best=i;}
+    });
+    return best;
+  }
+
+  function bindPlanCanvasEvents(){
+    planCanvas = document.getElementById('plan-canvas');
+    planCanvas.addEventListener('mousedown', function(e){
+      var p = planPointerPos(e);
+
+      if(planMode==='select' && ocrLabels.length){
+        var labelIdx = findNearOcrLabel(p[0],p[1]);
+        if(labelIdx>=0){
+          if(planSelected<0){
+            document.getElementById('plan-status').textContent = 'Select a wall line first, then click its dimension chip.';
+            return;
+          }
+          var seg = planSegs[planSelected];
+          var pxLen = Math.hypot(seg.x2-seg.x1, seg.y2-seg.y1);
+          planScalePxPerM = pxLen / ocrLabels[labelIdx].value;
+          document.getElementById('plan-status').textContent = 'Scale set from "'+ocrLabels[labelIdx].text+'": ' + planScalePxPerM.toFixed(1) + ' px/m.';
+          return;
+        }
+      }
+
+      if(planMode==='entrance'){
+        var segIdx = findNearSeg(p[0],p[1]);
+        if(segIdx>=0){
+          var s = planSegs[segIdx];
+          var dx=s.x2-s.x1, dy=s.y2-s.y1;
+          var len2 = dx*dx+dy*dy || 1;
+          var t = Math.max(0,Math.min(1, ((p[0]-s.x1)*dx+(p[1]-s.y1)*dy)/len2));
+          planEntranceIdx = segIdx;
+          planEntranceT = t;
+          drawPlan();
+          document.getElementById('plan-status').textContent = 'Entrance placed (green marker). Click another point on a wall to move it.';
+        } else {
+          document.getElementById('plan-status').textContent = 'Click directly on a wall line to place the entrance.';
+        }
+        return;
+      }
+
+      if(planMode==='scale'){
+        planScalePts.push(p);
+        drawPlan();
+        if(planScalePts.length===2){
+          var promptEl = document.getElementById('scale-prompt');
+          promptEl.style.display='flex';
+        }
+        return;
+      }
+      if(planMode==='add'){
+        planDrag = {newSeg:true, x1:p[0], y1:p[1], x2:p[0], y2:p[1]};
+        planSegs.push(planDrag);
+        planSelected = planSegs.length-1;
+        return;
+      }
+      var handle = findNearHandle(p[0],p[1]);
+      if(handle){
+        planDrag = {i:handle.i, end:handle.end};
+        planSelected = handle.i;
+        drawPlan();
+        return;
+      }
+      var segIdx = findNearSeg(p[0],p[1]);
+      planSelected = segIdx;
+      drawPlan();
+    });
+    planCanvas.addEventListener('mousemove', function(e){
+      if(!planDrag) return;
+      var p = planPointerPos(e);
+      var s = planSegs[planDrag.i !== undefined ? planDrag.i : planSegs.length-1];
+      if(planDrag.newSeg){
+        s.x2 = p[0]; s.y2 = p[1];
+      } else if(planDrag.end==='x1y1'){
+        s.x1 = p[0]; s.y1 = p[1];
+      } else {
+        s.x2 = p[0]; s.y2 = p[1];
+      }
+      drawPlan();
+    });
+    window.addEventListener('mouseup', function(){ planDrag = null; });
+
+    document.getElementById('plan-redetect').onclick = autoDetectWalls;
+    document.getElementById('plan-ocr').onclick = runOCR;
+    document.getElementById('plan-add-mode').onclick = function(){
+      planMode = planMode==='add' ? 'select' : 'add';
+      document.getElementById('plan-add-mode').classList.toggle('active', planMode==='add');
+      document.getElementById('plan-scale-mode').classList.remove('active');
+      document.getElementById('plan-entrance-mode').classList.remove('active');
+      if(planMode==='add') document.getElementById('plan-status').textContent = 'Click and drag on the plan to draw a wall.';
+    };
+    document.getElementById('plan-scale-mode').onclick = function(){
+      planMode = planMode==='scale' ? 'select' : 'scale';
+      planScalePts = [];
+      document.getElementById('plan-scale-mode').classList.toggle('active', planMode==='scale');
+      document.getElementById('plan-add-mode').classList.remove('active');
+      document.getElementById('plan-entrance-mode').classList.remove('active');
+      if(planMode==='scale') document.getElementById('plan-status').textContent = 'Click two points on a wall of known real-world length.';
+    };
+    document.getElementById('plan-entrance-mode').onclick = function(){
+      planMode = planMode==='entrance' ? 'select' : 'entrance';
+      document.getElementById('plan-entrance-mode').classList.toggle('active', planMode==='entrance');
+      document.getElementById('plan-add-mode').classList.remove('active');
+      document.getElementById('plan-scale-mode').classList.remove('active');
+      if(planMode==='entrance') document.getElementById('plan-status').textContent = 'Click the wall where the entrance/door is.';
+    };
+    document.getElementById('plan-delete').onclick = function(){
+      if(planSelected>=0){
+        planSegs.splice(planSelected,1);
+        if(planEntranceIdx === planSelected){
+          planEntranceIdx = -1;
+          document.getElementById('plan-status').textContent = 'Entrance wall was deleted — set a new entrance before building.';
+        } else if(planEntranceIdx > planSelected){
+          planEntranceIdx -= 1;
+        }
+        planSelected = -1;
+        drawPlan();
+      }
+    };
+    document.getElementById('scale-confirm').onclick = function(){
+      var meters = parseFloat(document.getElementById('scale-input').value) || 1;
+      var d = Math.hypot(planScalePts[1][0]-planScalePts[0][0], planScalePts[1][1]-planScalePts[0][1]);
+      planScalePxPerM = d / meters;
+      document.getElementById('scale-prompt').style.display = 'none';
+      planScalePts = [];
+      planMode = 'select';
+      document.getElementById('plan-scale-mode').classList.remove('active');
+      document.getElementById('plan-status').textContent = 'Scale set: ' + planScalePxPerM.toFixed(1) + ' px/m.';
+    };
+    document.getElementById('plan-cancel').onclick = function(){
+      document.getElementById('plan-editor').style.display = 'none';
+    };
+    document.getElementById('plan-build').onclick = function(){
+      if(!planScalePxPerM){
+        document.getElementById('plan-status').textContent = 'Set a scale first (click "Set scale", pick two points on a known wall).';
+        return;
+      }
+      if(!planSegs.length){
+        document.getElementById('plan-status').textContent = 'No walls to build — draw at least one.';
+        return;
+      }
+      if(planEntranceIdx < 0 || planEntranceIdx >= planSegs.length){
+        document.getElementById('plan-status').textContent = 'Click "Set entrance" and choose which wall the door is on before building.';
+        return;
+      }
+      usePlan = true;
+      document.getElementById('plan-editor').style.display = 'none';
+      document.getElementById('plan-file-status').textContent = planSegs.length + ' walls loaded from image.';
+      buildRoomFromPlan();
+    };
+  }
+
+  function buildUI(){
+    var roomList = document.getElementById('room-list');
+    roomPresets.forEach(function(p){
+      var b = document.createElement('button');
+      b.className = 'roombtn' + (p.id===currentPreset.id?' active':'');
+      b.innerHTML = p.name + '<small>'+p.desc+'</small>';
+      b.onclick = function(){
+        currentPreset = p;
+        usePlan = false;
+        document.querySelectorAll('.roombtn').forEach(function(x){x.classList.remove('active');});
+        b.classList.add('active');
+        buildRoom();
+      };
+      roomList.appendChild(b);
+    });
+
+    var furnList = document.getElementById('furn-list');
+    furnitureTypes.forEach(function(t){
+      var b = document.createElement('button');
+      b.className = 'furnbtn';
+      b.innerHTML = '<div class="sw" style="background:#'+t.color.toString(16).padStart(6,'0')+'"></div>' + t.name;
+      b.onclick = function(){
+        placingType = t.id;
+        document.querySelectorAll('.furnbtn').forEach(function(x){x.style.borderColor='';});
+        b.style.borderColor = '#c8842e';
+      };
+      furnList.appendChild(b);
+    });
+
+    var entranceSides = [
+      {id:'front', label:'Front wall'},
+      {id:'back', label:'Back wall'},
+      {id:'left', label:'Left wall'},
+      {id:'right', label:'Right wall'}
+    ];
+    var entranceList = document.getElementById('entrance-side-list');
+    entranceSides.forEach(function(s){
+      var b = document.createElement('button');
+      b.className = 'roombtn' + (s.id===entranceSide ? ' active' : '');
+      b.textContent = s.label;
+      b.onclick = function(){
+        entranceSide = s.id;
+        document.querySelectorAll('#entrance-side-list .roombtn').forEach(function(x){x.classList.remove('active');});
+        b.classList.add('active');
+        if(!usePlan) buildRoom();
+      };
+      entranceList.appendChild(b);
+    });
+    document.getElementById('entrance-pos-slider').addEventListener('input', function(e){
+      entrancePos = parseFloat(e.target.value)/100;
+      document.getElementById('entrance-pos-val').textContent = e.target.value+'%';
+      if(!usePlan) buildRoom();
+    });
+
+    document.getElementById('w-slider').addEventListener('input', function(e){
+      roomW = parseFloat(e.target.value);
+      document.getElementById('w-val').textContent = roomW.toFixed(1)+' m';
+      usePlan = false;
+      buildRoom();
+    });
+    document.getElementById('d-slider').addEventListener('input', function(e){
+      roomD = parseFloat(e.target.value);
+      document.getElementById('d-val').textContent = roomD.toFixed(1)+' m';
+      usePlan = false;
+      buildRoom();
+    });
+
+    document.getElementById('plan-upload-btn').onclick = function(){
+      document.getElementById('plan-file').click();
+    };
+    document.getElementById('plan-file').addEventListener('change', function(e){
+      loadImageFile(e.target, function(url){ openPlanEditor(url); });
+    });
+    bindPlanCanvasEvents();
+
+    document.getElementById('floor-tex').addEventListener('change', function(e){
+      loadImageFile(e.target, function(url){
+        floorTexImg = url;
+        usePlan ? buildRoomFromPlan() : buildRoom();
+      });
+    });
+    document.getElementById('wall-tex').addEventListener('change', function(e){
+      loadImageFile(e.target, function(url){
+        wallTexImg = url;
+        usePlan ? buildRoomFromPlan() : buildRoom();
+      });
+    });
+    document.getElementById('clear-tex').onclick = function(){
+      floorTexImg = null; wallTexImg = null;
+      document.getElementById('floor-tex').value = '';
+      document.getElementById('wall-tex').value = '';
+      usePlan ? buildRoomFromPlan() : buildRoom();
+    };
+
+    document.getElementById('walk-btn').onclick = function(){
+      if(walking) exitWalk(); else enterWalk();
+    };
+    document.getElementById('reset-btn').onclick = function(){
+      clearGroup(furnitureGroup);
+      selected = null;
+      updateSelBox();
+    };
+    document.getElementById('toggle-panel').onclick = function(){
+      document.getElementById('panel').classList.toggle('hidden');
+    };
+    document.getElementById('enter-btn').onclick = function(){
+      document.getElementById('overlay').style.display = 'none';
+    };
+  }
+
+  function showFatalError(err){
+    var d = document.createElement('div');
+    d.style.cssText = 'position:absolute;top:0;left:0;right:0;z-index:999;background:#7a1f1f;color:#fff;padding:12px 16px;font-family:sans-serif;font-size:13px;';
+    d.textContent = 'The app hit an error and could not fully load: ' + (err && err.message ? err.message : err);
+    document.body.appendChild(d);
+  }
+
+  try{
+    init();
+    buildUI();
+  } catch(err){
+    showFatalError(err);
+    console.error(err);
+  }
+})();
+</script>
+</body>
+</html>
